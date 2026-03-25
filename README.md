@@ -1,33 +1,53 @@
-# ❄️ FrostTrace
+# ❄️ FrostTrace: High-Integrity Cold-Chain Engine
 
-**Status:** Initial Specification  
-**Focus:** Cold-Chain Integrity & Recursive Lineage
+**Architecture:** Distributed Microservices  
+**Stack:** .NET 10, MongoDB, RabbitMQ, Docker  
+**Domain:** Logistics & Supply Chain Integrity  
 
 ---
 
-## 1. The Core Vision
-FrostTrace is an **immutable lineage engine** for high-stakes logistics. It solves the "Food Poisoning" problem by ensuring that every movement of a product is tracked via a **Handshake Protocol** and every temperature deviation triggers a **Recursive Quarantine**.
+## 1. Business Core Logic (The Problem)
+In high-stakes logistics (Pharmaceuticals, Premium Seafood), "Food Poisoning" or product loss occurs because of two failures:
+1. **Lack of Custody Proof:** No one knows exactly when the temperature spiked or who was responsible.
+2. **Delayed Reaction:** Spikes are discovered at the destination, after the product is already ruined.
 
-## 2. Key System Invariants (The "Rules")
-* **The Chain of Custody:** A `Batch` cannot change its `CurrentLocation` without a `TransferEvent`. This requires a digital signature (Token/QR) from both the Sender and the Receiver.
-* **Immutable Lineage:** A `Batch` can be split into `ChildBatches`. Children inherit all historical telemetry data from the Parent. If a Parent is flagged, the entire branch is locked.
-* **Event-Driven Quarantine:** The system does not "check" status once a day. It reacts to a **Telemetry Stream**. If $T > Threshold$ for $N$ consecutive pings, the Batch state is force-changed to `QUARANTINED`.
+**FrostTrace** solves this by automating the "Quarantine" the moment a thermal breach occurs and enforcing a digital "Handshake" between actors.
 
-## 3. High-Level Architecture (Dockerized)
-* **`frosttrace-api` (.NET 9):** The source of truth for Batch state and Handshakes.
-* **`frosttrace-ingestor`:** A "Fire-and-Forget" service that collects JSON pings from IoT simulators.
-* **`frosttrace-worker`:** Listens to the **RabbitMQ** queue to process telemetry and manage Sagas.
-* **`frosttrace-db` (MongoDB):**
-    * `Batches`: Relational structure for lineage.
-    * `Telemetry`: Time-series collection for sensor pings.
-    * `AuditLog`: Append-only collection for every state change.
+---
 
-## 4. Phase 1: Minimum Viable Logic
-1.  **Genesis:** Create a Batch with a defined "Safe Temperature Range."
-2.  **Handshake:** Implement the `InitiateTransfer` and `AcceptTransfer` endpoints.
-3.  **The Breach:** Create a script that sends 10 pings. On the 5th ping, the temperature spikes. The system must automatically transition the Batch to `QUARANTINED`.
+## 2. Service Architecture
+This project is split into three decoupled services to ensure high availability and scalability.
 
-## 5. Agent Workflow Instructions
-* **Architect Agent:** Maintain the API contracts and ensure no "CRUD-only" logic creeps in.
-* **Developer Agent:** Focus on building the **Recursive Ancestry Lookup**.
-* **QA Agent:** Simulate "Chaos" by injecting high temperatures into the `ingestor` service.
+### A. `FrostTrace.Api` (The Command Center)
+* **Responsibility:** Manages the source of truth for Batches and Handshakes.
+* **Core Flow:** * Creates "Genesis" batches with defined thermal thresholds.
+    * Generates Handshake Tokens (UUID/QR) for transfers.
+    * Updates ownership once both parties verify the handshake.
+* **Database:** `Batches` collection (Parent-Child relationships).
+
+### B. `FrostTrace.Ingestor` (The Data Sink)
+* **Responsibility:** High-speed intake of IoT sensor data.
+* **Core Flow:** * Receives JSON pings: `{ batchId, temp, timestamp, gps }`.
+    * Performs **zero** business logic to remain fast.
+    * Pushes every ping onto a **RabbitMQ** exchange (Routing Key: `telemetry.raw`).
+
+### C. `FrostTrace.Worker` (The Brain)
+* **Responsibility:** Processes telemetry and enforces business rules (Sagas).
+* **Core Flow:** * Consumes from RabbitMQ.
+    * **Threshold Check:** Compares pings against the Batch's safe range.
+    * **Auto-Quarantine:** If 3 consecutive pings exceed the limit, it emits a `ThermalBreach` event.
+    * **Lineage Locking:** Traces down the tree to flag all sub-batches as `COMPROMISED`.
+
+---
+
+## 3. The "Frozen Throne" Business Flow
+
+
+1. **Initialization:** Producer creates a Batch (e.g., "Vaccine-Batch-001", Temp: 2°C - 8°C).
+2. **Custody Transfer:** - Shipper (A) initiates transfer to Driver (B).
+   - Batch status becomes `IN_TRANSIT`.
+3. **Active Monitoring:** - IoT Simulator sends pings to the **Ingestor**.
+   - **Worker** monitors the pings.
+4. **The Breach (The "Meat" of the project):** - If Temp hits 12°C, the **Worker** triggers a status update to `QUARANTINED`.
+   - The **API** prevents Driver (B) from completing the "Acceptance" handshake.
+5. **Traceability:** Consumer scans a QR code; the API performs a **Recursive Lookup** to show every temperature ping and every person who touched the product.

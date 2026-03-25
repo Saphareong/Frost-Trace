@@ -1,0 +1,42 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: frost-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: FrostTraceDb
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: frost-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"   # RabbitMQ management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+  api:
+    build:
+      context: .
+      dockerfile: src/FrostTrace.Api/Dockerfile
+    container_name: frost-api
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDB__ConnectionString=mongodb://mongo:27017
+      - MongoDB__DatabaseName=FrostTraceDb
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Port=5672
+      - RabbitMQ__Username=guest
+      - RabbitMQ__Password=guest
+    depends_on:
+      - mongo
+      - rabbitmq
+
+volumes:
+  mongo_data:
